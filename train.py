@@ -105,6 +105,12 @@ def train(max_eps=1000, gamma=0.99, render=False, initial_max_trail_steps=400):
                 [sanitized_state], dtype=tf.float32))
             action = sample_action(action_space_size, action_dist.numpy()[0])
             next_state, reward, done, _ = env.step(action)
+            if reward > 0:
+                reward = 1
+            elif reward < 0:
+                reward = -1
+            else:
+                reward = -0.01
             actions.append(action)
             states.append(sanitized_state)
             rewards.append(reward)
@@ -133,10 +139,10 @@ def train(max_eps=1000, gamma=0.99, render=False, initial_max_trail_steps=400):
             # print('batch size: ', len(batch))
             with tf.GradientTape() as tape:
                 # print('states shape: {0}, actions shape: {1}, q vals shape: {2}'.format(tf.shape(batch[0]), tf.shape(batch[1]), tf.shape(batch[2])))
-                probs_raw, vals = model(batch[0])
-                # print('probs shape: {0}, vals shape: {1}'.format(tf.shape(probs_raw), tf.shape(vals)))
-                probs = tf.clip_by_value(probs_raw, 1e-10, 1-1e-10)
-                log_probs = tf.math.log(probs)
+                probs, vals = model(batch[0])
+                # print('probs shape: {0}, vals shape: {1}'.format(tf.shape(probs), tf.shape(vals)))
+                probs_clipped = tf.clip_by_value(probs, 1e-10, 1-1e-10)
+                log_probs = tf.math.log(probs_clipped)
                 q_vals = batch[2]
                 advantage = q_vals - vals
                 action_onehot = batch[1]
@@ -149,7 +155,7 @@ def train(max_eps=1000, gamma=0.99, render=False, initial_max_trail_steps=400):
             # print('Finished calculating gradients')
             optimizer.apply_gradients(zip(grads, model.trainable_weights))
             # print('Finished applying gradients')
-        if eps % 10 == 0:
+        if eps % 10 == 0 and eps != 0:
             eval_score = eval(model, eval_env, 1, action_space_size, render)
             print('Finished training {0}/{1} with score {2}'.format(eps, max_eps, eval_score))
     env.close()
